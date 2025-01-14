@@ -1,4 +1,5 @@
 const path = require('path');
+const url = require('url');
 const { URI } = require('vscode-uri');
 const fsAdapter = require('native-fs-adapter');
 
@@ -51,6 +52,25 @@ async function getPackageModuleContainer(pkg) {
 
 async function getPackageDirectory(pkg) {
   const pkgName = getPackageName(pkg);
+
+  const projectDir = await pkgDir(pkg.fileName);
+  const pnpLoader = path.join(projectDir, '.pnp.loader.mjs');
+
+  try {
+    const { resolve } = await import(pnpLoader);
+    return await pkgDir(
+      url.fileURLToPath(
+        (
+          await resolve(pkgName, {
+            parentURL: url.pathToFileURL(pkg.fileName),
+          })
+        ).url,
+      ),
+    );
+  } catch {
+    //
+  }
+
   const tmp = await getPackageModuleContainer(pkg);
   return path.resolve(tmp, pkgName);
 }

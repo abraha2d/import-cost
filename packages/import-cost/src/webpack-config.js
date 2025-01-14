@@ -7,9 +7,28 @@ const {
 } = require('./utils.js');
 const TimeoutPlugin = require('./timeout-plugin.js');
 const TerserPlugin = require('terser-webpack-plugin');
+const PnpWebpackPlugin = require('pnp-webpack-plugin');
+
+async function pnpLoader(fileName) {
+  const context = await pkgDir(path.dirname(fileName));
+
+  try {
+    const { register } = require('node:module');
+    const { pathToFileURL } = require('node:url');
+
+    register(path.join(context, '.pnp.loader.mjs'), pathToFileURL(fileName));
+    await import(path.join(context, '.pnp.loader.mjs')); // for process.versions.pnp
+
+    return PnpWebpackPlugin.moduleLoader(fileName);
+  } catch (e) {
+    console.error(e);
+    return () => {};
+  }
+}
 
 async function webpackConfig(entry, packageInfo, { maxCallTime }) {
   return {
+    context: await pkgDir(path.dirname(packageInfo.fileName)),
     entry,
     target: 'node',
     snapshot: {
@@ -29,13 +48,14 @@ async function webpackConfig(entry, packageInfo, { maxCallTime }) {
     ],
     resolve: {
       mainFields: ['browser', 'module', 'main'],
+      plugins: [await pnpLoader(packageInfo.fileName)],
+    },
+    resolveLoader: {
       modules: [
-        path.join(
-          await pkgDir(path.dirname(packageInfo.fileName)),
-          'node_modules',
-        ),
-        await getPackageModuleContainer(packageInfo),
-        'node_modules',
+        await getPackageModuleContainer({
+          fileName: __filename,
+          name: 'import-cost',
+        }),
       ],
     },
     module: {
